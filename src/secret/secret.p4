@@ -47,30 +47,67 @@ control SwitchIngress(
         size = 1024;
     }
 
-    /* 
-    Cria um registrador no formato:
-        Register <tipo de dado armazenado, tamanho do indexador> (quantas entradas)
-    No caso abaixo cria um registrador com uma entrada, indexado por 1 bit e valores de 32 bits.
-    DICA: o mesmo registrador não pode ser acessado mais de uma vez por pacote, e armazenam valores
-    de no máximo 32 bits, utilize multiplos registradores
-    */
-    Register<bit<32>, bit<1>> (1) secret_values;
+    /* 4 Registers de 32 bits (1 entrada cada) — armazenam a chave de 128 bits */
+    Register<bit<32>, bit<1>> (1) secret_values_1;
+    Register<bit<32>, bit<1>> (1) secret_values_2;
+    Register<bit<32>, bit<1>> (1) secret_values_3;
+    Register<bit<32>, bit<1>> (1) secret_values_4;
+
+    /* Ações de ESCRITA: gravam o pedaço da chave que veio no pacote rk */
+    RegisterAction<bit<32>, bit<1>, bit<32>>(secret_values_1) write_reg1 = {
+        void apply(inout bit<32> value) { value = hdr.rk.reg1; }
+    };
+    RegisterAction<bit<32>, bit<1>, bit<32>>(secret_values_2) write_reg2 = {
+        void apply(inout bit<32> value) { value = hdr.rk.reg2; }
+    };
+    RegisterAction<bit<32>, bit<1>, bit<32>>(secret_values_3) write_reg3 = {
+        void apply(inout bit<32> value) { value = hdr.rk.reg3; }
+    };
+    RegisterAction<bit<32>, bit<1>, bit<32>>(secret_values_4) write_reg4 = {
+        void apply(inout bit<32> value) { value = hdr.rk.reg4; }
+    };
+
+    /* Ações de LEITURA: retornam o valor armazenado para comparar com a msg */
+    RegisterAction<bit<32>, bit<1>, bit<32>>(secret_values_1) read_reg1 = {
+        void apply(inout bit<32> value, out bit<32> rv) { rv = value; }
+    };
+    RegisterAction<bit<32>, bit<1>, bit<32>>(secret_values_2) read_reg2 = {
+        void apply(inout bit<32> value, out bit<32> rv) { rv = value; }
+    };
+    RegisterAction<bit<32>, bit<1>, bit<32>>(secret_values_3) read_reg3 = {
+        void apply(inout bit<32> value, out bit<32> rv) { rv = value; }
+    };
+    RegisterAction<bit<32>, bit<1>, bit<32>>(secret_values_4) read_reg4 = {
+        void apply(inout bit<32> value, out bit<32> rv) { rv = value; }
+    };
 
 
     apply {
         /* Realiza roteamento MAC. Não excluir */
         forward.apply();
 
-        /*
-        Para ler um registrador:
-            secret_values.read(index);
+        if (hdr.rk.isValid()) {
+            /* ETHERTYPE_REGISTRA_KEY (0x9999): grava a chave nos 4 Registers */
+            write_reg1.execute(0);
+            write_reg2.execute(0);
+            write_reg3.execute(0);
+            write_reg4.execute(0);
+        }
+        else if (hdr.msg.isValid()) {
+            /* ETHERTYPE_MENSAGEM (0x8888): lê chave armazenada e compara com a msg */
+            meta.aux1 = read_reg1.execute(0);
+            meta.aux2 = read_reg2.execute(0);
+            meta.aux3 = read_reg3.execute(0);
+            meta.aux4 = read_reg4.execute(0);
 
-        Para escrever:
-            secret_values.write(index, value);
-
-        Para dropar um pacote:
-            ig_dprsr_md.drop_ctl = 1;
-        */
+            if (meta.aux1 != hdr.msg.reg1 ||
+                meta.aux2 != hdr.msg.reg2 ||
+                meta.aux3 != hdr.msg.reg3 ||
+                meta.aux4 != hdr.msg.reg4) {
+                ig_dprsr_md.drop_ctl = 1;   /* chave errada -> dropa */
+            }
+            /* chave correta -> não faz nada, forward.apply() já setou a porta */
+        }
     }
 }
 

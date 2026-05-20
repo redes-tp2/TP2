@@ -68,7 +68,7 @@ parser SwitchIngressParser(packet_in pkt,
 			ETHERTYPE_REGISTRA_KEY : estado_registrar;
 			ETHERTYPE_MENSAGEM : estado_mensagem;
 			default : accept;
-		};
+		}
 	}
 
 	state estado_registrar {
